@@ -1,0 +1,22 @@
+.DS_Store
+__pycache__/
+.vscode/
+.env
+.venv/
+venv/
+
+# Runtime data (repo root)
+qdrant_db/
+markdown_docs/
+parent_store/
+docs/
+auth.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Eval outputs
+ragas_*.csv
+rag_evaluation_*.csv
+rag_evaluation_*.png
