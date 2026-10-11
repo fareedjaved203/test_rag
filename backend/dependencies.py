@@ -22,3 +22,11 @@ def get_rag_system(current_user: User = Depends(get_current_user)) -> RAGSystem:
                 system.initialize()
                 _cache[user_id] = system
     return _cache[user_id]
+
+
+def shutdown_all():
+    """Close all RAGSystem SQLite connections on server shutdown."""
+    with _lock:
+        for system in _cache.values():
+            system.close()
+        _cache.clear()

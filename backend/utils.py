@@ -28,8 +28,8 @@ def pdf_to_markdown(pdf_path: str, output_dir: str) -> None:
     doc = pymupdf.open(pdf_path)
     md = pymupdf4llm.to_markdown(
         doc,
-        header=False,
-        footer=False,
+        header=True,
+        footer=True,
         page_separators=True,
         ignore_images=True,
         write_images=False,

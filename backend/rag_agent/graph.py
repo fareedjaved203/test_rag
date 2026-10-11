@@ -1,5 +1,5 @@
 from langgraph.graph import START, END, StateGraph
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.prebuilt import ToolNode
 from functools import partial
 
@@ -17,12 +17,12 @@ from .nodes import (
     summarize_history,
 )
 from .edges import route_after_orchestrator_call, route_after_rewrite
+import config
 
-def create_agent_graph(llm, tools_list):
+
+def create_agent_graph(llm, tools_list, checkpointer=None):
     llm_with_tools = llm.bind_tools(tools_list)
     tool_node = ToolNode(tools_list)
-
-    checkpointer = InMemorySaver()
 
     print("Compiling agent graph...")
     agent_builder = StateGraph(AgentState)
@@ -56,7 +56,10 @@ def create_agent_graph(llm, tools_list):
     graph_builder.add_edge(["agent"], "aggregate_answers")
     graph_builder.add_edge("aggregate_answers", END)
 
-    agent_graph = graph_builder.compile(checkpointer=checkpointer, interrupt_before=["request_clarification"])
+    agent_graph = graph_builder.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["request_clarification"],
+    )
 
     print("✓ Agent graph compiled successfully.")
     return agent_graph

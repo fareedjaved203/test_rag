@@ -1,5 +1,7 @@
 import uuid
+import sqlite3
 from langchain_ollama import ChatOllama
+from langgraph.checkpoint.sqlite import SqliteSaver
 import config
 from db.vector_db_manager import VectorDbManager
 from db.parent_store_manager import ParentStoreManager
@@ -19,7 +21,10 @@ class RAGSystem:
         self.chunker = DocumentChunker()
         self.observability = Observability()
         self.agent_graph = None
-        self.thread_id = str(uuid.uuid4())
+        self._db_conn = None
+        # Each user gets a thread_id namespaced to their user_id so
+        # SQLite checkpoints from different users never collide.
+        self.thread_id = f"{user_id}_{uuid.uuid4()}"
         self.recursion_limit = config.GRAPH_RECURSION_LIMIT
 
     def initialize(self):
@@ -32,7 +37,16 @@ class RAGSystem:
             seed=config.LLM_SEED,
         )
         tools = ToolFactory(collection).create_tools()
-        self.agent_graph = create_agent_graph(llm, tools)
+
+        # Keep the SQLite connection open for the lifetime of this RAGSystem.
+        # SqliteSaver requires check_same_thread=False for FastAPI's thread pool.
+        self._db_conn = sqlite3.connect(
+            config.CHAT_DB_PATH,
+            check_same_thread=False,
+        )
+        checkpointer = SqliteSaver(self._db_conn)
+
+        self.agent_graph = create_agent_graph(llm, tools, checkpointer=checkpointer)
 
     def get_config(self):
         cfg = {
@@ -45,8 +59,13 @@ class RAGSystem:
         return cfg
 
     def reset_thread(self):
-        try:
-            self.agent_graph.checkpointer.delete_thread(self.thread_id)
-        except Exception as e:
-            print(f"Warning: Could not delete thread {self.thread_id}: {e}")
-        self.thread_id = str(uuid.uuid4())
+        """Start a new conversation thread (keeps history of old thread in DB)."""
+        self.thread_id = f"{self.user_id}_{uuid.uuid4()}"
+
+    def close(self):
+        """Close the SQLite connection — called on app shutdown."""
+        if self._db_conn:
+            try:
+                self._db_conn.close()
+            except Exception:
+                pass

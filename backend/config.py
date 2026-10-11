@@ -10,6 +10,9 @@ QDRANT_DB_PATH = os.path.join(_BASE_DIR, "qdrant_db")
 
 # Auth / SQLite
 AUTH_DB_PATH = os.path.join(_BASE_DIR, "auth.db")
+
+# Chat history persistence
+CHAT_DB_PATH = os.path.join(_BASE_DIR, "chat_history.db")
 JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "change-me-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = 60 * 24  # 24 hours

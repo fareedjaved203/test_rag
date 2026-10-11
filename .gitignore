@@ -11,6 +11,9 @@ markdown_docs/
 parent_store/
 docs/
 auth.db
+chat_history.db
+chat_history.db-shm
+chat_history.db-wal
 
 # Frontend
 frontend/node_modules/
