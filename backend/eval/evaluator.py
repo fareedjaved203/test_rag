@@ -33,7 +33,8 @@ Score from 0.0 to 1.0 where:
 0.5 = some claims supported, some not
 0.0 = answer contradicts or ignores the context entirely
 
-Reply with ONLY a number between 0.0 and 1.0, nothing else."""
+Your response must be a single number like 0.8 or 1.0. Do not write any explanation.
+Score:"""
 
 _RELEVANCY_PROMPT = """You are evaluating whether an answer is relevant to the question.
 
@@ -48,7 +49,8 @@ Score from 0.0 to 1.0 where:
 0.5 = answer partially addresses the question
 0.0 = answer is off-topic or does not address the question
 
-Reply with ONLY a number between 0.0 and 1.0, nothing else."""
+Your response must be a single number like 0.8 or 1.0. Do not write any explanation.
+Score:"""
 
 _CONTEXT_PRECISION_PROMPT = """You are evaluating whether the retrieved context contains information useful for answering the question.
 
@@ -63,7 +65,8 @@ Score from 0.0 to 1.0 where:
 0.5 = context is partially relevant
 0.0 = context is irrelevant to the question
 
-Reply with ONLY a number between 0.0 and 1.0, nothing else."""
+Your response must be a single number like 0.8 or 1.0. Do not write any explanation.
+Score:"""
 
 _CONTEXT_RECALL_PROMPT = """You are evaluating whether the retrieved context covers the information needed to answer the question fully.
 
@@ -81,18 +84,34 @@ Score from 0.0 to 1.0 where:
 0.5 = context contains some but not all needed information
 0.0 = context is missing the information needed
 
-Reply with ONLY a number between 0.0 and 1.0, nothing else."""
+Your response must be a single number like 0.8 or 1.0. Do not write any explanation.
+Score:"""
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+import re
+
 def _score(llm: ChatOllama, prompt: str) -> float:
     try:
         response = llm.invoke([HumanMessage(content=prompt)])
-        text = response.content.strip().split()[0].rstrip(".,;")
-        return max(0.0, min(1.0, float(text)))
+        text = response.content.strip()
+        # First try: direct parse of the whole response trimmed
+        try:
+            return max(0.0, min(1.0, float(text.split()[0].rstrip(".,;:"))))
+        except (ValueError, IndexError):
+            pass
+        # Second try: find any decimal number in the response (e.g. "score of 0.8" or "1.0")
+        matches = re.findall(r"\b(1\.0|0\.\d+)\b", text)
+        if matches:
+            return max(0.0, min(1.0, float(matches[0])))
+        # Third try: find any single digit 0 or 1
+        matches = re.findall(r"\b([01])\b", text)
+        if matches:
+            return float(matches[0])
+        return 0.0
     except Exception:
         return 0.0
 
@@ -118,7 +137,7 @@ def run_evaluation(rag_system) -> Generator[str, None, None]:
     try:
         qa_pairs = generate_questions_for_chunks(
             rag_system.parent_store,
-            num_questions=config.EVAL_NUM_QUESTIONS,
+            num_questions_per_doc=config.EVAL_QUESTIONS_PER_DOC,
         )
     except Exception as e:
         yield _emit({"type": "error", "message": f"Question generation failed: {e}"})
@@ -158,11 +177,12 @@ def run_evaluation(rag_system) -> Generator[str, None, None]:
 
         combined_context = "\n\n".join(retrieved_contexts)
 
-        # Get answer from RAG
+        # Get answer from RAG — use a fresh chat session per question
         answer = ""
         try:
             from core.chat_interface import ChatInterface
             chat = ChatInterface(rag_system)
+            rag_system.reset_thread()  # fresh thread per question — no cross-question context
             for raw in chat.stream(question):
                 event = json.loads(raw)
                 if event.get("type") == "token":
